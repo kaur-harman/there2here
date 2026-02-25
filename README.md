@@ -59,7 +59,7 @@ terraform apply
 
 ---
 
-## 🛠 Tech Stack (So Far)
+## 🛠 Tech Stack
 
 - Terraform (Infrastructure as Code)
 - Google Cloud Storage (Data Lake)
