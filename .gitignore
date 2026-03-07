@@ -5,4 +5,7 @@ __pycache__/
 terraform/.terraform/
 terraform/terraform.tfstate*
 scraper/.env
+scraper/.venv
 *.log
+
+data/
