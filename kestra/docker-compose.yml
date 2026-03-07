@@ -1,0 +1,24 @@
+services:
+  kestra:
+    image: kestra/kestra:latest
+    container_name: kestra_trade
+
+    command: server standalone
+
+    ports:
+      - "8081:8080"
+
+    volumes:
+      - //var/run/docker.sock:/var/run/docker.sock
+
+    environment:
+      KESTRA_CONFIGURATION: |
+        kestra:
+          repository:
+            type: memory
+          queue:
+            type: memory
+          storage:
+            type: local
+            local:
+              base-path: "/tmp/kestra"
