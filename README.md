@@ -1,6 +1,6 @@
 # **There to Here: Mapping Imports to India**
 
-This project aims to build a cloud-native data engineering pipeline to analyse India’s monthly import trends over the last 2 years.
+This project aims to build a cloud-native data engineering pipeline to analyse India’s monthly import trends over the last year.
 
 The goal is to demonstrate production-style data engineering practices including:
 
