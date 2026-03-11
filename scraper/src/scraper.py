@@ -19,7 +19,12 @@ MAX_RETRIES = 3
 
 session = requests.Session()
 
-gcs_client = storage.Client()
+CREDENTIALS_PATH = os.getenv(
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "/app/credentials/service-account.json"
+)
+
+gcs_client = storage.Client.from_service_account_json(CREDENTIALS_PATH)
 bucket = gcs_client.bucket(BUCKET_NAME)
 
 
