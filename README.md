@@ -1,27 +1,45 @@
 # **There to Here: Mapping Imports to India**
 
-This project aims to build a cloud-native data engineering pipeline to analyse India’s monthly import trends over the last year.
+## Project Overview
 
-The goal is to demonstrate production-style data engineering practices including:
+This project builds an **end-to-end cloud-native data engineering pipeline** to analyze India's import dependencies.
 
-- Infrastructure provisioning using Terraform
-- Cloud data lake setup
-- Cloud data warehouse setup
-- Reproducible project architecture
+### Core Question
+
+As India moves toward becoming a **$5T economy**, key questions arise:
+
+- Where is India sourcing its imports from?
+- What commodities are being imported?
+- Are these dependencies shifting over time?
+
+This pipeline collects, stores, and prepares trade data to answer these questions.
 
 
 ---
 
+### Architecture
+```mermaid
+graph TD
+    A[Kestra Orchestrator] -->|Triggers| B(Dockerized Python Scraper)
+    B -->|Uploads CSVs| C[Google Cloud Storage <br/> Raw Data Lake]
+    C -->|Loads to| D[BigQuery <br/> Data Warehouse]
+    D -->|Transforms via| E[dbt]
+    E -->|Feeds| F[Analytics Dashboard]
+  ```
+
+
 ## 🗂 Dataset
 
 Source: Directorate General of Commercial Intelligence and Statistics (DGCIS)  
-Report: Import – Country-wise All Commodities  
+Report: Import – Country-wise All Commodities; https://tradestat.commerce.gov.in/meidb/
 
-Planned configuration:
-- HS Code Level: 2-digit
-- Frequency: Monthly
-- Year Type: Calendar Year
-- Period: Last 2 years
+Configuration:
+
+- HS Code Level: **2-digit**
+- Frequency: **Monthly**
+- Metrics: **Import Value (USD)** and **Quantity**
+- Coverage: **All countries**
+- Time Period: **Recent monthly data**
 
 ---
 
@@ -106,4 +124,14 @@ This will create:
 - A BigQuery dataset for analytics
 
 ---
+### Data Ingestion Pipeline
 
+Trade data is collected using a **Python scraper**.
+
+The scraper:
+
+- Discovers all countries dynamically from the source website
+- Retrieves import tables for each country
+- Extracts both **USD value** and **quantity metrics**
+- Saves results as CSV files
+- Uploads files to **Google Cloud Storage**
