@@ -1,0 +1,32 @@
+id: gcp_kv
+namespace: there2here
+description: >
+  Run this FIRST before any other flows.
+  Sets up all required KV store values for the pipeline.
+  Update the values below to match your GCP project before running.
+  GCP_SERVICE_ACCOUNT must be added manually in Kestra KV store UI.
+
+tasks:
+  - id: gcp_project_id
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_PROJECT_ID
+    kvType: STRING
+    value: de-zoomcamp-2026-486917
+
+  - id: gcp_bucket_name
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_BUCKET_NAME
+    kvType: STRING
+    value: de-zoomcamp-2026-486917-trade-raw
+
+  - id: gcp_dataset
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_DATASET
+    kvType: STRING
+    value: india_trade_warehouse
+
+  - id: gcp_region
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_REGION
+    kvType: STRING
+    value: asia-south2
