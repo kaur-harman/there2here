@@ -1,0 +1,78 @@
+id: india_trade_backfill
+namespace: there2here
+description: >
+  One-time backfill flow to scrape all months of a given year from DGCIS
+  and upload raw CSVs to GCS. Run this once to populate GCS with historical
+  data. After completion, load_gcs_to_bigquery is called automatically.
+  Note: DGCIS publishes with ~3 month lag (e.g. Apr 2026 → Jan 2026 latest).
+  To test: set year=2026, months=["01"] and table_suffix=_v2 to avoid
+  touching existing production tables.
+
+inputs:
+  - id: project_id
+    type: STRING
+    defaults: de-zoomcamp-2026-486917
+  - id: bucket_name
+    type: STRING
+    defaults: de-zoomcamp-2026-486917-trade-raw
+  - id: dataset
+    type: STRING
+    defaults: india_trade_warehouse
+  - id: year
+    type: STRING
+    defaults: "2025"
+  - id: months
+    type: ARRAY
+    itemType: STRING
+    defaults:
+      - "01"
+      - "02"
+      - "03"
+      - "04"
+      - "05"
+      - "06"
+      - "07"
+      - "08"
+      - "09"
+      - "10"
+      - "11"
+      - "12"
+  - id: table_suffix
+    type: STRING
+    defaults: ""
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      projectId: "{{ inputs.project_id }}"
+      serviceAccount: "{{ kv('GCP_SERVICE_ACCOUNT') }}"
+
+tasks:
+  - id: scrape_all_months
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ inputs.months }}"
+    concurrencyLimit: 1
+    tasks:
+      - id: run_scraper
+        type: io.kestra.plugin.docker.Run
+        containerImage: asia-south2-docker.pkg.dev/de-zoomcamp-2026-486917/trade-scraper-repo/trade-scraper:latest
+        commands:
+          - python
+          - /app/src/scraper.py
+        env:
+          YEAR: "{{ inputs.year }}"
+          MONTH: "{{ taskrun.value }}"
+          GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
+          BUCKET_NAME: "{{ inputs.bucket_name }}"
+
+  - id: load_to_bigquery
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: there2here
+    flowId: load_gcs_to_bigquery
+    inputs:
+      project_id: "{{ inputs.project_id }}"
+      bucket_name: "{{ inputs.bucket_name }}"
+      dataset: "{{ inputs.dataset }}"
+      year: "{{ inputs.year }}"
+      months: "{{ inputs.months }}"
+      table_suffix: "{{ inputs.table_suffix }}"
