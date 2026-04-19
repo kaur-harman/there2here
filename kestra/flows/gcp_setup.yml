@@ -1,0 +1,27 @@
+id: gcp_setup
+namespace: there2here
+description: >
+  Run this SECOND after gcp_kv flow.
+  Creates GCS bucket and BigQuery dataset if they don't already exist.
+  Safe to re-run - uses ifExists: SKIP so nothing gets overwritten.
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{ kv('GCP_SERVICE_ACCOUNT') }}"
+      projectId: "{{ kv('GCP_PROJECT_ID') }}"
+      region: "{{ kv('GCP_REGION') }}"
+
+tasks:
+  - id: create_gcs_bucket
+    type: io.kestra.plugin.gcp.gcs.CreateBucket
+    name: "{{ kv('GCP_BUCKET_NAME') }}"
+    location: "{{ kv('GCP_REGION') }}"
+    storageClass: STANDARD
+    ifExists: SKIP
+
+  - id: create_bq_dataset
+    type: io.kestra.plugin.gcp.bigquery.CreateDataset
+    name: "{{ kv('GCP_DATASET') }}"
+    location: "{{ kv('GCP_REGION') }}"
+    ifExists: SKIP
