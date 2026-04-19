@@ -1,0 +1,211 @@
+id: load_gcs_to_bigquery
+namespace: there2here
+description: >
+  Loads scraped CSV data from GCS into BigQuery.
+  Creates two partitioned + clustered tables:
+    - imports_usd: USD trade values per country/commodity/month
+    - imports_quantity: quantity traded per country/commodity/month
+  Partitioned by report_date (DATE), clustered by country_name and hs_code.
+  Use table_suffix (e.g. _v2) to load into test tables without touching
+  production data.
+  Peer reviewers: update input defaults to your own GCP values and
+  add your service account JSON to Kestra KV store as GCP_SERVICE_ACCOUNT.
+
+inputs:
+  - id: project_id
+    type: STRING
+    defaults: de-zoomcamp-2026-486917
+  - id: bucket_name
+    type: STRING
+    defaults: de-zoomcamp-2026-486917-trade-raw
+  - id: dataset
+    type: STRING
+    defaults: india_trade_warehouse
+  - id: year
+    type: STRING
+    defaults: "2025"
+  - id: months
+    type: ARRAY
+    itemType: STRING
+    defaults:
+      - "01"
+      - "02"
+      - "03"
+      - "04"
+      - "05"
+      - "06"
+      - "07"
+      - "08"
+      - "09"
+      - "10"
+      - "11"
+      - "12"
+  - id: table_suffix
+    type: STRING
+    required: false
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      projectId: "{{ inputs.project_id }}"
+      serviceAccount: "{{ kv('GCP_SERVICE_ACCOUNT') }}"
+
+tasks:
+  - id: load_all_months
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ inputs.months }}"
+    concurrencyLimit: 1
+    tasks:
+      - id: load_month
+        type: io.kestra.plugin.scripts.python.Script
+        containerImage: python:3.11-slim
+        beforeCommands:
+          - pip install pandas google-cloud-storage google-cloud-bigquery db-dtypes pandas-gbq -q
+        env:
+          MONTH: "{{ taskrun.value }}"
+          YEAR: "{{ inputs.year }}"
+          GCP_SA: "{{ kv('GCP_SERVICE_ACCOUNT') }}"
+          PROJECT: "{{ inputs.project_id }}"
+          BUCKET: "{{ inputs.bucket_name }}"
+          DATASET: "{{ inputs.dataset }}"
+          TABLE_SUFFIX: "{{ inputs.table_suffix ?? '' }}"
+        script: |
+          import os, io, json
+          import pandas as pd
+          from datetime import date
+          from google.cloud import storage, bigquery
+          from google.oauth2 import service_account
+
+          YEAR         = os.environ["YEAR"]
+          MONTH        = os.environ["MONTH"]
+          SA_JSON      = os.environ["GCP_SA"]
+          PROJECT      = os.environ["PROJECT"]
+          BUCKET       = os.environ["BUCKET"]
+          DATASET      = os.environ["DATASET"]
+          TABLE_SUFFIX = os.environ.get("TABLE_SUFFIX", "")
+
+          creds = service_account.Credentials.from_service_account_info(json.loads(SA_JSON))
+          gcs   = storage.Client(credentials=creds, project=PROJECT)
+          bq    = bigquery.Client(credentials=creds, project=PROJECT)
+
+          bucket_obj = gcs.bucket(BUCKET)
+          prefix     = f"raw/{YEAR}/{MONTH}/"
+          blobs      = list(bucket_obj.list_blobs(prefix=prefix))
+          print(f"Found {len(blobs)} files for {YEAR}/{MONTH}")
+
+          if not blobs:
+              print(f"No files found for {YEAR}/{MONTH}, skipping")
+              exit(0)
+
+          USD_COLS = [
+              "sno", "hs_code", "commodity",
+              "month_prev_year", "month_curr_year", "month_growth_pct",
+              "ytd_prev_year", "ytd_curr_year", "ytd_growth_pct"
+          ]
+          QTY_COLS = [
+              "sno", "hs_code", "commodity", "unit",
+              "month_prev_year", "month_curr_year", "month_growth_pct",
+              "ytd_prev_year", "ytd_curr_year", "ytd_growth_pct"
+          ]
+          USD_SCHEMA = [
+              bigquery.SchemaField("country_name",     "STRING"),
+              bigquery.SchemaField("year",             "INTEGER"),
+              bigquery.SchemaField("month",            "INTEGER"),
+              bigquery.SchemaField("report_date",      "DATE"),
+              bigquery.SchemaField("sno",              "INTEGER"),
+              bigquery.SchemaField("hs_code",          "STRING"),
+              bigquery.SchemaField("commodity",        "STRING"),
+              bigquery.SchemaField("month_prev_year",  "FLOAT"),
+              bigquery.SchemaField("month_curr_year",  "FLOAT"),
+              bigquery.SchemaField("month_growth_pct", "FLOAT"),
+              bigquery.SchemaField("ytd_prev_year",    "FLOAT"),
+              bigquery.SchemaField("ytd_curr_year",    "FLOAT"),
+              bigquery.SchemaField("ytd_growth_pct",   "FLOAT"),
+          ]
+          QTY_SCHEMA = [
+              bigquery.SchemaField("country_name",     "STRING"),
+              bigquery.SchemaField("year",             "INTEGER"),
+              bigquery.SchemaField("month",            "INTEGER"),
+              bigquery.SchemaField("report_date",      "DATE"),
+              bigquery.SchemaField("sno",              "INTEGER"),
+              bigquery.SchemaField("hs_code",          "STRING"),
+              bigquery.SchemaField("commodity",        "STRING"),
+              bigquery.SchemaField("unit",             "STRING"),
+              bigquery.SchemaField("month_prev_year",  "FLOAT"),
+              bigquery.SchemaField("month_curr_year",  "FLOAT"),
+              bigquery.SchemaField("month_growth_pct", "FLOAT"),
+              bigquery.SchemaField("ytd_prev_year",    "FLOAT"),
+              bigquery.SchemaField("ytd_curr_year",    "FLOAT"),
+              bigquery.SchemaField("ytd_growth_pct",   "FLOAT"),
+          ]
+
+          usd_dfs = []
+          qty_dfs = []
+          skipped = []
+
+          for blob in blobs:
+              if not blob.name.endswith(".csv"):
+                  continue
+              filename     = blob.name.split("/")[-1].replace(".csv", "")
+              parts        = filename.rsplit("_", 1)
+              country_name = parts[0].replace("_", " ").title()
+              metric       = parts[1]
+              content      = blob.download_as_text()
+              df           = pd.read_csv(io.StringIO(content))
+              df           = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+              n_cols       = len(df.columns)
+
+              if metric == "usd" and n_cols == 9:
+                  df.columns = USD_COLS
+              elif metric == "quantity" and n_cols == 10:
+                  df.columns = QTY_COLS
+              else:
+                  skipped.append(
+                      f"{blob.name} | metric={metric} | "
+                      f"cols={n_cols} | headers={df.columns.tolist()}"
+                  )
+                  continue
+
+              df["country_name"] = country_name
+              df["year"]         = int(YEAR)
+              df["month"]        = int(MONTH)
+              df["report_date"]  = date(int(YEAR), int(MONTH), 1)
+
+              for col in ["month_prev_year","month_curr_year","month_growth_pct",
+                          "ytd_prev_year","ytd_curr_year","ytd_growth_pct"]:
+                  df[col] = pd.to_numeric(df[col], errors="coerce")
+              df["sno"]     = pd.to_numeric(df["sno"], errors="coerce")
+              df["hs_code"] = df["hs_code"].astype(str)
+
+              if metric == "usd":
+                  usd_dfs.append(df)
+              else:
+                  qty_dfs.append(df)
+
+          if skipped:
+              print(f"\n Skipped {len(skipped)} unexpected files:")
+              for s in skipped:
+                  print(f"  {s}")
+
+          def load_to_bq(dfs, table, schema):
+              if not dfs:
+                  print(f"No data for {table}, skipping")
+                  return
+              combined  = pd.concat(dfs, ignore_index=True)
+              table_ref = f"{PROJECT}.{DATASET}.{table}"
+              print(f"Loading {len(combined)} rows into {table_ref}...")
+              job_config = bigquery.LoadJobConfig(
+                  write_disposition="WRITE_APPEND",
+                  schema=schema,
+                  time_partitioning=bigquery.TimePartitioning(
+                      type_=bigquery.TimePartitioningType.MONTH,
+                      field="report_date"
+                  ),
+                  clustering_fields=["country_name", "hs_code"]
+              )
+              job = bq.load_table_from_dataframe(combined, table_ref, job_config=job_config)
+              job.result()
+              print(f" Loaded {len(combined)} rows into {table} for {YEAR}/{MONTH}")
+
+          load_to_bq(usd_dfs, f"imports_usd{TABLE_SUFFIX}",     USD_SCHEMA)
+          load_to_bq(qty_dfs, f"imports_quantity{TABLE_SUFFIX}", QTY_SCHEMA)
