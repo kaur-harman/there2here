@@ -7,5 +7,11 @@ terraform/terraform.tfstate*
 scraper/.env
 scraper/.venv
 *.log
+scraper/credentials/service-account.json
 
 data/
+dbt-env/
+.python-version
+india_trade/target/
+india_trade/dbt_packages/
+india_trade/logs/

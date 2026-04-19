@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: india_trade_warehouse
+    database: de-zoomcamp-2026-486917
+    schema: india_trade_warehouse
+    tables:
+      - name: imports_usd
+        description: Raw USD import values scraped from DGCIS, partitioned by report_date
+      - name: imports_quantity
+        description: Raw quantity import values scraped from DGCIS, partitioned by report_date

@@ -1,0 +1,65 @@
+version: 2
+
+models:
+  - name: mart_imports
+    description: >
+      Combined imports mart joining USD values and quantities per country,
+      commodity and month. Used as the primary table for dashboard analytics.
+      Excludes total/summary rows, keeping only commodity-level detail.
+      Includes derived metrics: import share %, commodity ranking, country
+      ranking per commodity, price proxy, and growth categorization.
+    columns:
+      - name: country_name
+        description: Name of the importing country
+        tests:
+          - not_null
+      - name: report_date
+        description: First day of the report month e.g. 2025-01-01
+        tests:
+          - not_null
+      - name: hs_code
+        description: 2-digit Harmonized System commodity code
+        tests:
+          - not_null
+      - name: commodity
+        description: Commodity description
+      - name: unit
+        description: Unit of measurement for quantity (from quantity table)
+      - name: month_curr_year_usd
+        description: Import value in USD millions for current month
+      - name: month_prev_year_usd
+        description: Import value in USD millions for same month previous year
+      - name: month_growth_pct
+        description: Month-on-month growth percentage vs same month last year
+      - name: month_curr_year_qty
+        description: Import quantity for current month
+      - name: month_prev_year_qty
+        description: Import quantity for same month previous year
+      - name: month_growth_pct_qty
+        description: Quantity growth percentage vs same month last year
+      - name: ytd_curr_year_usd
+        description: Year to date import value in USD millions
+      - name: ytd_prev_year_usd
+        description: Year to date import value in USD millions previous year
+      - name: ytd_growth_pct
+        description: Year to date growth percentage vs previous year
+      - name: ytd_curr_year_qty
+        description: Year to date import quantity
+      - name: ytd_prev_year_qty
+        description: Year to date import quantity previous year
+      - name: ytd_growth_pct_qty
+        description: Year to date quantity growth percentage
+      - name: total_monthly_imports_usd
+        description: Total India imports in USD millions for that month across all countries and commodities
+      - name: import_share_pct
+        description: This country-commodity combination as percentage of total monthly imports
+      - name: country_rank_by_commodity
+        description: Rank of country as supplier for this specific commodity in this month (1 = top supplier)
+      - name: commodity_rank
+        description: Rank of this commodity by total import value in this month (1 = most imported commodity)
+      - name: price_proxy_usd_per_unit
+        description: Proxy for price per unit (USD millions * 1M / quantity). Exploratory metric - noisy due to mixed units
+      - name: growth_category
+        description: "Monthly growth bucket: high_growth (>=25%), moderate_growth (>=5%), stable (>-5%), decline"
+      - name: ytd_growth_category
+        description: "YTD growth bucket: high_growth (>=25%), moderate_growth (>=5%), stable (>-5%), decline"
