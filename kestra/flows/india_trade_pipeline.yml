@@ -1,0 +1,55 @@
+id: india_trade_pipeline
+namespace: there2here
+description: >
+  Monthly scheduled pipeline - runs on 10th of each month automatically.
+  Scrapes data from 3 months prior to account for DGCIS ~3 month
+  publication lag (e.g. running in Apr 2026 scrapes Jan 2026 data).
+  Uploads CSVs to GCS then appends to BigQuery via load_gcs_to_bigquery subflow.
+  For initial historical backfill, use india_trade_backfill flow instead.
+
+inputs:
+  - id: project_id
+    type: STRING
+    defaults: de-zoomcamp-2026-486917
+  - id: bucket_name
+    type: STRING
+    defaults: de-zoomcamp-2026-486917-trade-raw
+  - id: dataset
+    type: STRING
+    defaults: india_trade_warehouse
+
+triggers:
+  - id: monthly
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 6 10 * *"
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      projectId: "{{ inputs.project_id }}"
+      serviceAccount: "{{ kv('GCP_SERVICE_ACCOUNT') }}"
+
+tasks:
+  - id: run_scraper
+    type: io.kestra.plugin.docker.Run
+    containerImage: asia-south2-docker.pkg.dev/de-zoomcamp-2026-486917/trade-scraper-repo/trade-scraper:latest
+    commands:
+      - python
+      - /app/src/scraper.py
+    env:
+      YEAR: "{{ trigger.date | dateAdd(-3, 'MONTHS') | date('yyyy') }}"
+      MONTH: "{{ trigger.date | dateAdd(-3, 'MONTHS') | date('MM') }}"
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
+      BUCKET_NAME: "{{ inputs.bucket_name }}"
+
+  - id: load_to_bigquery
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: there2here
+    flowId: load_gcs_to_bigquery
+    inputs:
+      project_id: "{{ inputs.project_id }}"
+      bucket_name: "{{ inputs.bucket_name }}"
+      dataset: "{{ inputs.dataset }}"
+      year: "{{ trigger.date | dateAdd(-3, 'MONTHS') | date('yyyy') }}"
+      months:
+        - "{{ trigger.date | dateAdd(-3, 'MONTHS') | date('MM') }}"
